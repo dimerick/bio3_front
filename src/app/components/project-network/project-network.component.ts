@@ -1,5 +1,5 @@
 import { Component, OnInit, ViewChild } from '@angular/core';
-import { circle, Icon, LatLng, Layer, marker, Marker, point, Point, Polyline, polyline, DivIcon, DomEvent, latLng, svgOverlay, SVGOverlay, LatLngBounds, icon, divIcon, Map, ZoomAnimEvent, canvas, svg, SVG, layerGroup, LayerGroup, DomUtil } from 'leaflet';
+import { circle, Icon, LatLng, Layer, marker, Marker, point, Point, Polyline, polyline, DivIcon, DomEvent, latLng, svgOverlay, SVGOverlay, LatLngBounds, icon, divIcon, Map, ZoomAnimEvent, canvas, svg, SVG, layerGroup, LayerGroup, DomUtil, map } from 'leaflet';
 import { Enlace } from 'src/app/models/enlace';
 import { LayerMap } from 'src/app/models/LayerMap';
 import { ProjectService } from 'src/app/services/project.service';
@@ -30,10 +30,12 @@ export class ProjectNetworkComponent implements OnInit {
   public groundZoom: number;
   public lastZoom: number;
   public lastTopLeftlatLng: LatLng;
+  public initTopLeftlatLng: LatLng;
   public shift: Point;
   public svg: any;
   public g: any;
   public lockUpdateEnlances = false;
+  public initZoom: number;
 
   public canvasIconClean = divIcon({
     iconSize: [0, 0],
@@ -349,22 +351,34 @@ export class ProjectNetworkComponent implements OnInit {
   }
 
   mapZoomEnd(e: ZoomAnimEvent) {
-    this.updateEnlaces();
+    // let map = this.mapComponent.map;
+    // let scale = map.getZoomScale(e.zoom, this.lastZoom);
+    // let offSet = map._latLngToNewLayerPoint(this.lastTopLeftlatLng, e.zoom, e.center);
+    // DomUtil.setTransform(this.svg, );
+    // this.updatePaths();
     
   }
   mapMoveEnd(e: boolean){
-    this.updateEnlaces();
+    let map = this.mapComponent.map;
+    this.updateSVG();
+    // if(this.lastZoom != map.getZoom()){
+    //   this.updateScaleSVG();
+    //   this.updateScaleSVG();
+    // }else{
+    //   this.updatePositionSVG();
+    //   this.updateSVG();
+    // }
+    
   }
   mapSizeChange(e: boolean){
-    let map = this.mapComponent.map;
-    let size = map.getSize();
-    this.svg.setAttribute('width', size.x);
-    this.svg.setAttribute('height', size.y);
+    this.updateSVG();
+    
   }
 
   drawEnlaces(){
     console.log("drawEnlaces");
     let map = this.mapComponent.map;
+    
 
     let pane = map.getPanes().overlayPane;
 
@@ -376,16 +390,21 @@ export class ProjectNetworkComponent implements OnInit {
     svg.setAttribute('width', mapSize.x.toString());
     svg.setAttribute('height', mapSize.y.toString());
 
+    svg.setAttribute('viewBox', `0 0 ${mapSize.x.toString()} ${mapSize.y.toString()}`);
+
     svg.appendChild(g);
     
     this.groundZoom = map.getZoom();
     
     this.shift = new Point(0,0);
     this.lastZoom = map.getZoom();
+    this.initZoom = map.getZoom();
 
     let bounds = map.getBounds();
 
-    this.lastTopLeftlatLng = new LatLng(bounds.getNorth(), bounds.getWest())
+    this.lastTopLeftlatLng = new LatLng(bounds.getNorth(), bounds.getWest());
+
+    this.initTopLeftlatLng = new LatLng(bounds.getNorth(), bounds.getWest())
 
     let paths = ``;
     
@@ -422,6 +441,7 @@ export class ProjectNetworkComponent implements OnInit {
     });
     
     g.innerHTML = paths;
+    // svg.innerHTML = paths;
 
     pane.appendChild(svg);
     
@@ -430,31 +450,132 @@ export class ProjectNetworkComponent implements OnInit {
    
   }
 
-  updateEnlaces(){
-    
-    
+  updatePositionSVG(){
     let map = this.mapComponent.map;
     let bounds = map.getBounds();
-
+    let size = map.getSize();
     let topLeftLatLng = new LatLng(bounds.getNorth(), bounds.getWest());
     let topLeftLayerPoint  = map.latLngToLayerPoint(topLeftLatLng);
     let lastLeftLayerPoint = map.latLngToLayerPoint(this.lastTopLeftlatLng);
+    let delta = lastLeftLayerPoint.subtract(topLeftLayerPoint);
+    this.shift = this.shift.add(delta);
 
+    DomUtil.setPosition(this.svg, topLeftLayerPoint);
+
+    
+    // this.g.setAttribute("transform", "translate(" + this.shift.x + "," + this.shift.y + ")");
+    this.updatePaths();
+    this.lastTopLeftlatLng = topLeftLatLng;
+
+  }
+
+  updateSVG(){
+    let map = this.mapComponent.map;
+    let bounds = map.getBounds();
+    let size = map.getSize();
+    let topLeftLatLng = new LatLng(bounds.getNorth(), bounds.getWest());
+    let topLeftLayerPoint  = map.latLngToLayerPoint(topLeftLatLng);
+    let lastLeftLayerPoint = map.latLngToLayerPoint(this.lastTopLeftlatLng);
+    let initTopLeftlatLngLayerPoint = map.latLngToLayerPoint(this.initTopLeftlatLng);
+    let delta = lastLeftLayerPoint.subtract(topLeftLayerPoint);
+    let delta2 = initTopLeftlatLngLayerPoint.subtract(topLeftLayerPoint);
+    let zoom = map.getZoom();
+    let scaleDelta = map.getZoomScale(zoom, this.lastZoom);
+    let scaleDelta2 = map.getZoomScale(zoom, this.initZoom);
+    // let scaleDelta = map.getZoomScale(this.initZoom, zoom);
+    let scaleDiff = this.getScaleDiff(zoom);
+
+    let difZoom = this.initZoom - zoom;
+    let scaleZoomNew = Math.pow(2, Math.abs(difZoom));
+
+
+    // this.shift = this.shift.multiplyBy(scaleDelta).add(delta);
+    // let shift = this.shift.multiplyBy(scaleDelta).add(delta);
+    let shift = this.shift.multiplyBy(scaleDelta).add(delta2);
+
+    this.svg.setAttribute('width', size.x);
+    this.svg.setAttribute('height', size.y);
+
+    DomUtil.setPosition(this.svg, topLeftLayerPoint);
+
+    this.svg.setAttribute('viewBox', `0 0 ${size.x} ${size.y}`);
+
+    this.g.setAttribute("transform", "translate(" + shift.x + "," + shift.y + ") scale(" + scaleDelta2 + ")");
+
+    // this.g.setAttribute("transform", "translate(" + this.shift.x + "," + this.shift.y + ")");
+    // this.updatePaths();
+    this.lastTopLeftlatLng = topLeftLatLng;
+    this.lastZoom = zoom;
+    
+
+  }
+  
+  updateScaleSVG(){
+    let map = this.mapComponent.map;
+    let bounds = map.getBounds();
+    let size = map.getSize();
+    let topLeftLatLng = new LatLng(bounds.getNorth(), bounds.getWest());
+    let topLeftLayerPoint  = map.latLngToLayerPoint(topLeftLatLng);
+    let lastLeftLayerPoint = map.latLngToLayerPoint(this.lastTopLeftlatLng);
+    let delta = lastLeftLayerPoint.subtract(topLeftLayerPoint);
     let zoom = map.getZoom();
     let scaleDelta = map.getZoomScale(zoom, this.lastZoom);
     let scaleDiff = this.getScaleDiff(zoom);
 
-    this.lastZoom = zoom;
-    let delta = lastLeftLayerPoint.subtract(topLeftLayerPoint);
+    let difZoom = this.initZoom - zoom;
+    let scaleZoomNew = Math.pow(2, Math.abs(difZoom));
 
-    this.lastTopLeftlatLng = topLeftLatLng;
-    DomUtil.setPosition(this.svg, topLeftLayerPoint);
-    
-    
-    this.shift = this.shift.multiplyBy(scaleDelta).add(delta);
-    
-    this.g.setAttribute("transform", "translate(" + this.shift.x + "," + this.shift.y + ") scale(" + scaleDiff + ")");
+    this.mapComponent.setScaleDiff(scaleDiff);
 
+    // this.shift = this.shift.multiplyBy(scaleDelta).add(delta);
+    let shift = this.shift.subtract(delta);
+
+    this.svg.setAttribute('width', size.x);
+    this.svg.setAttribute('height', size.y);
+
+    
+
+    // DomUtil.setPosition(this.svg, topLeftLayerPoint);
+
+    this.svg.setAttribute('viewBox', `${shift.x} ${shift.y} ${shift.x*scaleZoomNew} ${shift.y*scaleZoomNew}`);
+  }
+  updatePaths(){
+    let paths = ``;
+    
+    this.enlaces.forEach(enl => {
+      let point1 = this.mapComponent.map.latLngToLayerPoint(enl.initPoint);
+          let point2 = this.mapComponent.map.latLngToLayerPoint(enl.endPoint);
+
+          let width = Math.abs(point2.x - (point1.x));
+          let height = Math.abs(point2.y - (point1.y));
+
+          
+          let minx = point1.x;
+          let maxx = point2.x;
+          let despx = 0;
+          if (point2.x < minx) {
+            minx = point2.x;
+            maxx = point1.x;
+            despx = width;
+          }
+
+          let miny = point1.y;
+          let maxy = point2.y;
+          let despy = 0;
+          if (point2.y < miny) {
+            miny = point2.y;
+            maxy = point1.y;
+            despy = height;
+          }
+          let xmed = minx + (width / 2);
+          let ymed = maxy;
+          
+          paths += `<path d='M${point1.x},${point1.y} Q${xmed},${ymed} ${point2.x},${point2.y}' fill='none' stroke="red" stroke-width="5"/>`;
+
+    });
+    
+    this.g.innerHTML = paths;
+    // this.svg.innerHTML = paths;
   }
 
   getScaleDiff(zoom: number) {

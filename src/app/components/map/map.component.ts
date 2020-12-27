@@ -1,6 +1,6 @@
 /// <reference types='@runette/leaflet-fullscreen' />
 import { Component, OnInit, OnDestroy, Input, Output, EventEmitter } from '@angular/core';
-import { Map, Control, DomUtil, ZoomAnimEvent, Layer, MapOptions, tileLayer, latLng, geoJSON, divIcon, Marker, Circle, circle, marker, layerGroup, Icon, LatLng, DragEndEvent, FullscreenOptions, DomEvent, TileEventHandlerFn } from 'leaflet';
+import { Map, Control, DomUtil, ZoomAnimEvent, Layer, MapOptions, tileLayer, latLng, geoJSON, divIcon, Marker, Circle, circle, marker, layerGroup, Icon, LatLng, DragEndEvent, FullscreenOptions, DomEvent, TileEventHandlerFn, Bounds, LatLngBounds } from 'leaflet';
 
 
 
@@ -57,23 +57,33 @@ export class MapComponent implements OnInit, OnDestroy {
   };
   public hideInfoLayer = true;
   public infoLayer = null;
+  public mapLayer = null;
+  public initialZoom: number;
+  public lastZoom: number;
+  public scaleDiff: number;
+  public initTop: number;
+  public initLeft: number;
+  public actTop: number;
+  public actLeft: number;
+  public boundsMap: LatLngBounds;
   public Custom = Control.extend({
 
     onAdd(map: Map) {
 
       let container = DomUtil.get('info-layer');
 
-      // let inputSearch = DomUtil.get('inputSearch');
-      // DomEvent.addListener(inputSearch, 'click', (e) => {
-      //   DomEvent.stopPropagation(e);
-      //   inputSearch.focus();            
-      // });
+      DomEvent.disableClickPropagation(container);
 
-      // DomEvent.addListener(container, 'click', DomEvent.stopPropagation)
-      // .addListener(container, 'click', DomEvent.preventDefault)
-      // .addListener(container, 'dblclick onmouseup', ()=>{
-      //   console.log(this);
-      // });
+      return container;
+    },
+    onRemove(map: Map) { }
+  });
+
+  public CustomInfoMap = Control.extend({
+
+    onAdd(map: Map) {
+
+      let container = DomUtil.get('info-map');
 
       DomEvent.disableClickPropagation(container);
 
@@ -106,7 +116,7 @@ export class MapComponent implements OnInit, OnDestroy {
       })],
       zoom: this.zoom,
       center: latLng(this.lat, this.lon),
-      zoomControl: false
+      zoomControl: true
     };
 
 
@@ -185,17 +195,34 @@ export class MapComponent implements OnInit, OnDestroy {
       console.log("cambió el tamaño del mapa");
       this.onMapSizeEvent.emit(true);
     });
+
+    this.initialZoom = map.getZoom();
+    this.lastZoom = map.getZoom();
+
+    this.initTop = this.map.getBounds().getNorth();
+    this.initLeft = this.map.getBounds().getWest();
+
+    this.actTop = this.map.getBounds().getNorth();
+    this.actLeft = this.map.getBounds().getWest();
+    
+    this.mapLayer = new this.CustomInfoMap({
+      position: 'bottomleft'
+    });
+    this.map.addControl(this.mapLayer);
   }
 
   onMapZoomEnd(e: ZoomAnimEvent) {
     this.zoom = e.target.getZoom();
+    this.lastZoom = e.target.getZoom();
     this.zoom$.emit(this.zoom);
     this.mapZoomEndEvent.emit(e);
+    this.getBounds();
   }
 
   onMapMoveEnd(e: any) {
     console.log(e);
     this.onMapMoveEndEvent.emit(true);
+    this.getBounds();
   }
 
   //   onEachFeature(feature, layer) {
@@ -280,6 +307,13 @@ export class MapComponent implements OnInit, OnDestroy {
 
   }
 
+  setScaleDiff(scaleDiff: number){
+this.scaleDiff = scaleDiff;
+  }
 
+getBounds(){
+  this.actTop = this.map.getBounds().getNorth();
+  this.actLeft = this.map.getBounds().getWest();
+}
 
 }
